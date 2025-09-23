@@ -1,7 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import { BlockPublicAccess, Bucket, IBucket } from "aws-cdk-lib/aws-s3";
 import { Role, ServicePrincipal, PolicyStatement } from "aws-cdk-lib/aws-iam";
-import { StringParameter } from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
 
 export interface SourceAccountStackProps extends cdk.StackProps {
