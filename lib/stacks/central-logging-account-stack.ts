@@ -1,6 +1,5 @@
 import * as cdk from "aws-cdk-lib";
 import { BlockPublicAccess, Bucket } from "aws-cdk-lib/aws-s3";
-import { PolicyStatement, Effect, ServicePrincipal } from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
 export class CentralLoggingAccountStack extends cdk.Stack {
@@ -18,31 +17,5 @@ export class CentralLoggingAccountStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true, // Ensure bucket is emptied before deletion
     });
-
-    // Allow S3 replication service to write to this bucket
-    this.aggregatedLogsBucket.addToResourcePolicy(
-      new PolicyStatement({
-        sid: "AllowS3ReplicationService",
-        effect: Effect.ALLOW,
-        principals: [new ServicePrincipal("s3.amazonaws.com")],
-        actions: [
-          "s3:ReplicateObject",
-          "s3:ReplicateDelete",
-          "s3:ReplicateTags",
-        ],
-        resources: [this.aggregatedLogsBucket.arnForObjects("*")],
-      })
-    );
-
-    // Allow listing the bucket for replication
-    this.aggregatedLogsBucket.addToResourcePolicy(
-      new PolicyStatement({
-        sid: "AllowS3ReplicationServiceList",
-        effect: Effect.ALLOW,
-        principals: [new ServicePrincipal("s3.amazonaws.com")],
-        actions: ["s3:ListBucket"],
-        resources: [this.aggregatedLogsBucket.bucketArn],
-      })
-    );
   }
 }
