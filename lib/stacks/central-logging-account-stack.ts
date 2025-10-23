@@ -31,11 +31,10 @@ export class CentralLoggingAccountStack extends cdk.Stack {
       enforceSSL: true,
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true, // Ensure bucket is emptied before deletion
+      autoDeleteObjects: true,
     });
 
-    // Organization-based bucket policy for cross-account replication
-    // Fixed: Use AnyPrincipal with organization ID and role pattern conditions
+    // Use AnyPrincipal with organization ID and role pattern conditions
     this.aggregatedLogsBucket.addToResourcePolicy(
       new PolicyStatement({
         sid: "AllowOrganizationReplication",
