@@ -1,21 +1,28 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib";
 import { CentralLoggingAccountStack, SourceAccountStack } from "../lib/stacks";
-
-const env = {
-  account: process.env.CDK_DEFAULT_ACCOUNT,
-  region: process.env.CDK_DEFAULT_REGION,
-};
+import { accounts } from "../config/accounts";
 
 const app = new cdk.App();
-const centralizedLoggingStack = new CentralLoggingAccountStack(
-  app,
-  "CentralLoggingAccountStack",
-  {
-    env,
-  }
-);
-new SourceAccountStack(app, "ProdAccountStack", {
-  env,
-  centralBucket: centralizedLoggingStack.aggregatedLogsBucket,
+
+const { region, orgIdParameterName, sourceAccounts } = accounts;
+new CentralLoggingAccountStack(app, "CentralLoggingAccountStack", {
+  env: {
+    account: accounts.destinationAccount,
+    region,
+  },
+  orgIdParameterName,
 });
+
+for (const [sourceAccountKey, sourceAccountId] of Object.entries(
+  sourceAccounts
+)) {
+  new SourceAccountStack(app, `SourceAccount${sourceAccountKey}Stack`, {
+    env: {
+      account: sourceAccountId,
+      region,
+    },
+    // centralBucketArn is only hard-coded here for demo purposes
+    centralBucketArn: `arn:aws:s3:::central-logs-${accounts.destinationAccount}`,
+  });
+}

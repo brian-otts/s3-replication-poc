@@ -1,19 +1,28 @@
 import * as cdk from "aws-cdk-lib";
-import { BlockPublicAccess, Bucket, BucketPolicy } from "aws-cdk-lib/aws-s3";
-import {
-  PolicyStatement,
-  Effect,
-  ServicePrincipal,
-  AccountPrincipal,
-} from "aws-cdk-lib/aws-iam";
+import { BlockPublicAccess, Bucket } from "aws-cdk-lib/aws-s3";
+import { PolicyStatement, Effect, AnyPrincipal } from "aws-cdk-lib/aws-iam";
 import { StringParameter } from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
+
+export interface CentralLoggingAccountStackProps extends cdk.StackProps {
+  orgIdParameterName: string;
+}
 
 export class CentralLoggingAccountStack extends cdk.Stack {
   public readonly aggregatedLogsBucket: Bucket;
 
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(
+    scope: Construct,
+    id: string,
+    props: CentralLoggingAccountStackProps
+  ) {
     super(scope, id, props);
+
+    // Get organization ID from parameter store
+    const organizationId = StringParameter.valueFromLookup(
+      this,
+      props.orgIdParameterName
+    );
 
     // Create central logging bucket with versioning enabled (required for replication)
     this.aggregatedLogsBucket = new Bucket(this, "AggregatedAccessLogsBucket", {
@@ -25,62 +34,48 @@ export class CentralLoggingAccountStack extends cdk.Stack {
       autoDeleteObjects: true, // Ensure bucket is emptied before deletion
     });
 
-    // this.aggregatedAccessLogsBucket.addReplicationPolicy();
-
-    // Create bucket policy to allow replication from prod accounts
-    // const bucketPolicy = new BucketPolicy(this, "CentralLogsBucketPolicy", {
-    //   bucket: this.aggregatedAccessLogsBucket,
-    // });
-
-    // Allow S3 replication service to write to this bucket
+    // Organization-based bucket policy for cross-account replication
+    // Fixed: Use AnyPrincipal with organization ID and role pattern conditions
     this.aggregatedLogsBucket.addToResourcePolicy(
       new PolicyStatement({
-        sid: "AllowS3ReplicationService",
+        sid: "AllowOrganizationReplication",
         effect: Effect.ALLOW,
-        principals: [new ServicePrincipal("s3.amazonaws.com")],
-        actions: ["s3:ReplicateObject"],
+        principals: [new AnyPrincipal()],
+        actions: [
+          "s3:ReplicateObject",
+          "s3:ReplicateDelete",
+          "s3:ReplicateTags",
+        ],
         resources: [this.aggregatedLogsBucket.arnForObjects("*")],
         conditions: {
           StringEquals: {
-            "s3:x-amz-server-side-encryption": "AES256",
+            "aws:PrincipalOrgID": organizationId,
+          },
+          StringLike: {
+            "aws:PrincipalArn": "arn:aws:iam::*:role/*S3ReplicationRole*",
           },
         },
       })
     );
 
+    // Allow listing the bucket for replication from organization accounts
     this.aggregatedLogsBucket.addToResourcePolicy(
       new PolicyStatement({
-        sid: "AllowS3ReplicationService",
+        sid: "AllowOrganizationReplicationList",
         effect: Effect.ALLOW,
-        principals: [new ServicePrincipal("s3.amazonaws.com")],
-        actions: ["s3:ReplicateDelete", "s3:ReplicateTags"],
-        resources: [this.aggregatedLogsBucket.arnForObjects("*")],
-      })
-    );
-
-    // Allow listing the bucket for replication
-    this.aggregatedLogsBucket.addToResourcePolicy(
-      new PolicyStatement({
-        sid: "AllowS3ReplicationServiceList",
-        effect: Effect.ALLOW,
-        principals: [new ServicePrincipal("s3.amazonaws.com")],
+        principals: [new AnyPrincipal()],
         actions: ["s3:ListBucket"],
         resources: [this.aggregatedLogsBucket.bucketArn],
+        conditions: {
+          StringEquals: {
+            "aws:PrincipalOrgID": organizationId,
+          },
+          StringLike: {
+            "aws:PrincipalArn": "arn:aws:iam::*:role/*S3ReplicationRole*",
+          },
+          // Can add tag-based conditions here as well
+        },
       })
     );
-
-    // Store central bucket name in parameter store for other stacks to reference
-    // new StringParameter(this, "CentralBucketNameParameter", {
-    //   parameterName: "/logging/central-bucket-name",
-    //   stringValue: this.aggregatedAccessLogsBucket.bucketName,
-    //   description: "Name of the central logging S3 bucket for log aggregation",
-    // });
-
-    // // Output the bucket name for reference
-    // new cdk.CfnOutput(this, "CentralLoggingBucketName", {
-    //   value: this.aggregatedAccessLogsBucket.bucketName,
-    //   description: "Central logging bucket name",
-    //   exportName: `CentralLoggingBucketName`,
-    // });
   }
 }
